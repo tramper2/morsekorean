@@ -51,31 +51,47 @@
     const textInput = document.getElementById('textInput');
     const morseOutput = document.getElementById('morseOutput');
 
-    // 모르스 -> 텍스트 변환 (개선된 로직)
+    // [추가] 분리된 자음들을 쌍자음으로 복원하는 함수
+function packDoubleConsonants(chars) {
+    const map = { 'ㄱㄱ': 'ㄲ', 'ㄷㄷ': 'ㄸ', 'ㅂㅂ': 'ㅃ', 'ㅅㅅ': 'ㅆ', 'ㅈㅈ': 'ㅉ' };
+    let result = chars;
+    for (let key in map) {
+        result = result.split(key).join(map[key]);
+    }
+    return result;
+}
+   // 모르스 -> 텍스트 변환 로직
 morseOutput.addEventListener('input', () => {
     const inputVal = morseOutput.value.trim();
     
-    // 1. 단어/글자 단위로 분리 ( / 또는 공백 3칸 기준 )
-    const words = inputVal.split(/\s\/\s|\s{3,}/); 
+    // 1. 단어 단위 분리 ( / 기준 )
+    const words = inputVal.split(/\s\/\s/); 
     
     const decodedMessage = words.map(word => {
-        // 2. 글자 내의 자모음 부호들 분리 (공백 1칸 기준)
-        const codes = word.split(/\s+/);
-        const chars = codes.map(code => REVERSE_MAP[code] || '').join('');
+        // 2. 글자 단위 분리 (공백 2칸 이상 기준)
+        const letters = word.split(/\s{2,}/);
         
-        // 3. 각 글자 단위로 조립하여 합침
-        return Hangul.assemble(chars);
-    }).join(' '); // 단어 사이 공백 추가
+        return letters.map(letter => {
+            // 3. 자모음 단위 분리 (공백 1칸 기준)
+            const codes = letter.split(/\s+/);
+            let combinedChars = codes.map(code => REVERSE_MAP[code] || '').join('');
+            
+            // 4. [핵심] 분리된 ㅅㅅ, ㄷㄷ 등을 ㅆ, ㄸ으로 병합
+            combinedChars = packDoubleConsonants(combinedChars);
+            
+            // 5. 한글 조립
+            return Hangul.assemble(combinedChars);
+        }).join(''); // 글자들은 공백 없이 붙임
+    }).join(' '); // 단어 사이는 한 칸 띄움
 
     textInput.value = decodedMessage;
 });
 
-// 텍스트 -> 모르스 변환 (글자 간 간격 추가)
+// 텍스트 -> 모르스 변환 로직 (글자 간 공백 2칸 유지)
 textInput.addEventListener('input', () => {
     let val = textInput.value;
     let result = [];
 
-    // 글자별로 루프를 돌며 글자 사이에 명확한 구분자(   )를 삽입
     for (const char of val) {
         if (char === ' ') {
             result.push('/');
@@ -85,6 +101,7 @@ textInput.addEventListener('input', () => {
         let disassembled = Hangul.disassemble(char);
         let fixedList = [];
         disassembled.forEach(c => {
+            // ㅆ -> ㅅ, ㅅ 으로 분리하여 표준 모르스 규격 준수
             if (DOUBLE_CONSONANTS[c]) {
                 fixedList.push(...DOUBLE_CONSONANTS[c].split(''));
             } else {
@@ -92,11 +109,11 @@ textInput.addEventListener('input', () => {
             }
         });
 
+        // 글자 단위로 묶고, 글자 사이는 공백 2칸으로 구분
         result.push(fixedList.map(c => MORSE_MAP[c] || c).join(' '));
     }
     
-    // 글자와 글자 사이는 공백 3칸으로 구분
-    morseOutput.value = result.join('   '); 
+    morseOutput.value = result.join('  '); 
 });
 
     // 오디오 재생 로직 (기존과 동일)
