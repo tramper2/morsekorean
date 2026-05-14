@@ -1,1 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한글 모르스 부호 변환기</title>
+    <style>
+        body { font-family: 'Apple SD Gothic Neo', sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f4f4f9; }
+        h2 { text-align: center; color: #333; }
+        textarea { width: 100%; height: 120px; padding: 10px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; font-size: 1.1rem; resize: none; box-sizing: border-box; }
+        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-play { background-color: #4CAF50; color: white; }
+        .btn-play:hover { background-color: #45a049; }
+        .hint { font-size: 0.9rem; color: #666; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <h2>📟 한글 모르스 변환기</h2>
+    
+    <p>텍스트 (한글/영문/숫자):</p>
+    <textarea id="textInput" placeholder="안녕? 혹은 Hello 입력..."></textarea>
+
+    <div class="controls">
+        <button class="btn-play" onclick="playMorse()">🔊 신호 듣기</button>
+    </div>
+
+    <p>모르스 부호:</p>
+    <textarea id="morseOutput" placeholder=".-.-  ...-  ..-. (직접 입력 가능)"></textarea>
+
+    <p class="hint">부호와 부호 사이는 1칸 띄우고, 글자 사이는 3칸(또는 /) 띄워주세요.</p>
+
+    <!-- 한글 분리 라이브러리 (Hangul.js) -->
+    <script src="https://unpkg.com/hangul-js"></script>
+    <script>
+        const MORSE_MAP = {
+            // 한글 (SKATS 기준)
+            'ㄱ': '.-..', 'ㄴ': '..-.', 'ㄷ': '-...', 'ㄹ': '...-', 'ㅁ': '--', 'ㅂ': '.--', 'ㅅ': '--.', 'ㅇ': '.-.-', 'ㅈ': '.--.', 'ㅊ': '-.-.', 'ㅋ': '-..-', 'ㅌ': '--..', 'ㅍ': '---.', 'ㅎ': '----',
+            'ㅏ': '.', 'ㅑ': '..', 'ㅓ': '-', 'ㅕ': '...', 'ㅗ': '.-', 'ㅛ': '-.', 'ㅜ': '....', 'ㅠ': '.-.', 'ㅡ': '-..', 'ㅣ': '..-', 'ㅐ': '--.-', 'ㅔ': '-.--',
+            // 숫자 및 기호
+            '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----',
+            '?': '..--..', '.': '.-.-.-', ',': '--..--', '/': '-..-.', ' ': '/'
+        };
+
+        const REVERSE_MAP = Object.fromEntries(Object.entries(MORSE_MAP).map(([k, v]) => [v, k]));
+
+        const textInput = document.getElementById('textInput');
+        const morseOutput = document.getElementById('morseOutput');
+
+        // 텍스트 -> 모르스 변환
+        textInput.addEventListener('input', () => {
+            const val = textInput.value;
+            const disassembled = Hangul.disassemble(val);
+            const result = disassembled.map(char => MORSE_MAP[char] || char).join(' ');
+            morseOutput.value = result;
+        });
+
+        // 모르스 -> 텍스트 변환
+        morseOutput.addEventListener('input', () => {
+            const val = morseOutput.value.trim().split(/\s+/);
+            const decoded = val.map(code => REVERSE_MAP[code] || '').join('');
+            textInput.value = Hangul.assemble(decoded);
+        });
+
+        // 오디오 재생 설정
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playMorse() {
+            const morse = morseOutput.value;
+            let time = audioCtx.currentTime;
+            const dot = 0.1; // 점의 길이
+
+            morse.split('').forEach(symbol => {
+                if (symbol === '.' || symbol === '-') {
+                    const duration = (symbol === '.') ? dot : dot * 3;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    
+                    osc.type = 'sine';
+                    osc.frequency.value = 700; // 주파수 (Hz)
+                    
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    
+                    osc.start(time);
+                    osc.stop(time + duration);
+                    
+                    gain.gain.setValueAtTime(0.5, time);
+                    gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+                    
+                    time += duration + dot;
+                } else if (symbol === ' ') {
+                    time += dot * 2;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
 
