@@ -32,69 +32,79 @@
     <p class="hint">부호와 부호 사이는 1칸 띄우고, 글자 사이는 3칸(또는 /) 띄워주세요.</p>
 
     <!-- 한글 분리 라이브러리 (Hangul.js) -->
-    <script src="https://unpkg.com/hangul-js"></script>
-    <script>
-        const MORSE_MAP = {
-            // 한글 (SKATS 기준)
-            'ㄱ': '.-..', 'ㄴ': '..-.', 'ㄷ': '-...', 'ㄹ': '...-', 'ㅁ': '--', 'ㅂ': '.--', 'ㅅ': '--.', 'ㅇ': '.-.-', 'ㅈ': '.--.', 'ㅊ': '-.-.', 'ㅋ': '-..-', 'ㅌ': '--..', 'ㅍ': '---.', 'ㅎ': '----',
-            'ㅏ': '.', 'ㅑ': '..', 'ㅓ': '-', 'ㅕ': '...', 'ㅗ': '.-', 'ㅛ': '-.', 'ㅜ': '....', 'ㅠ': '.-.', 'ㅡ': '-..', 'ㅣ': '..-', 'ㅐ': '--.-', 'ㅔ': '-.--',
-            // 숫자 및 기호
-            '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----',
-            '?': '..--..', '.': '.-.-.-', ',': '--..--', '/': '-..-.', ' ': '/'
-        };
+   <script src="https://unpkg.com/hangul-js"></script>
+<script>
+    // 쌍자음을 기본 자음으로 분해하는 매핑 테이블
+    const DOUBLE_CONSONANTS = {
+        'ㄲ': 'ㄱㄱ', 'ㄸ': 'ㄷㄷ', 'ㅃ': 'ㅂㅂ', 'ㅆ': 'ㅅㅅ', 'ㅉ': 'ㅈㅈ'
+    };
 
-        const REVERSE_MAP = Object.fromEntries(Object.entries(MORSE_MAP).map(([k, v]) => [v, k]));
+    const MORSE_MAP = {
+        'ㄱ': '.-..', 'ㄴ': '..-.', 'ㄷ': '-...', 'ㄹ': '...-', 'ㅁ': '--', 'ㅂ': '.--', 'ㅅ': '--.', 'ㅇ': '.-.-', 'ㅈ': '.--.', 'ㅊ': '-.-.', 'ㅋ': '-..-', 'ㅌ': '--..', 'ㅍ': '---.', 'ㅎ': '----',
+        'ㅏ': '.', 'ㅑ': '..', 'ㅓ': '-', 'ㅕ': '...', 'ㅗ': '.-', 'ㅛ': '-.', 'ㅜ': '....', 'ㅠ': '.-.', 'ㅡ': '-..', 'ㅣ': '..-', 'ㅐ': '--.-', 'ㅔ': '-.--',
+        '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----',
+        '?': '..--..', '.': '.-.-.-', ',': '--..--', '/': '-..-.', ' ': '/'
+    };
 
-        const textInput = document.getElementById('textInput');
-        const morseOutput = document.getElementById('morseOutput');
+    const REVERSE_MAP = Object.fromEntries(Object.entries(MORSE_MAP).map(([k, v]) => [v, k]));
 
-        // 텍스트 -> 모르스 변환
-        textInput.addEventListener('input', () => {
-            const val = textInput.value;
-            const disassembled = Hangul.disassemble(val);
-            const result = disassembled.map(char => MORSE_MAP[char] || char).join(' ');
-            morseOutput.value = result;
+    const textInput = document.getElementById('textInput');
+    const morseOutput = document.getElementById('morseOutput');
+
+    textInput.addEventListener('input', () => {
+        let val = textInput.value;
+        
+        // 1. 한글 자모 분리
+        let disassembled = Hangul.disassemble(val);
+        
+        // 2. 쌍자음(ㄲ, ㄸ, ㅃ, ㅆ, ㅉ)을 일반 자음 2개로 변환
+        let fixedList = [];
+        disassembled.forEach(char => {
+            if (DOUBLE_CONSONANTS[char]) {
+                fixedList.push(...DOUBLE_CONSONANTS[char].split(''));
+            } else {
+                fixedList.push(char);
+            }
         });
 
-        // 모르스 -> 텍스트 변환
-        morseOutput.addEventListener('input', () => {
-            const val = morseOutput.value.trim().split(/\s+/);
-            const decoded = val.map(code => REVERSE_MAP[code] || '').join('');
-            textInput.value = Hangul.assemble(decoded);
+        // 3. 모르스 부호로 변환
+        const result = fixedList.map(char => MORSE_MAP[char] || char).join(' ');
+        morseOutput.value = result;
+    });
+
+    morseOutput.addEventListener('input', () => {
+        const val = morseOutput.value.trim().split(/\s+/);
+        const decoded = val.map(code => REVERSE_MAP[code] || '').join('');
+        textInput.value = Hangul.assemble(decoded);
+    });
+
+    // 오디오 재생 로직 (기존과 동일)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playMorse() {
+        const morse = morseOutput.value;
+        let time = audioCtx.currentTime;
+        const dot = 0.1;
+
+        morse.split('').forEach(symbol => {
+            if (symbol === '.' || symbol === '-') {
+                const duration = (symbol === '.') ? dot : dot * 3;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = 700;
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(time);
+                osc.stop(time + duration);
+                gain.gain.setValueAtTime(0.5, time);
+                gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+                time += duration + dot;
+            } else if (symbol === ' ') {
+                time += dot * 2;
+            }
         });
-
-        // 오디오 재생 설정
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playMorse() {
-            const morse = morseOutput.value;
-            let time = audioCtx.currentTime;
-            const dot = 0.1; // 점의 길이
-
-            morse.split('').forEach(symbol => {
-                if (symbol === '.' || symbol === '-') {
-                    const duration = (symbol === '.') ? dot : dot * 3;
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-                    
-                    osc.type = 'sine';
-                    osc.frequency.value = 700; // 주파수 (Hz)
-                    
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    
-                    osc.start(time);
-                    osc.stop(time + duration);
-                    
-                    gain.gain.setValueAtTime(0.5, time);
-                    gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
-                    
-                    time += duration + dot;
-                } else if (symbol === ' ') {
-                    time += dot * 2;
-                }
-            });
-        }
-    </script>
+    }
+</script>
 </body>
 </html>
 
