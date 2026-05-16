@@ -301,7 +301,7 @@
             // 수동으로 모르스 -> 텍스트 변환 트리거
             updateTextFromMorse();
             
-            analysisInfo.innerHTML = `✅ 분석 완료!<br>파일: ${file.name}<br>길이: ${(audioBuffer.duration).toFixed(2)}초`;
+            analysisInfo.innerHTML = `✅ 분석 완료!<br>파일: ${file.name}<br>길이: ${(audioBuffer.duration).toFixed(2)}초<br>인식된 부호: ${recognizedMorse || '(신호 감지 안됨)'}`;
             progressBar.style.display = 'none';
         } catch (error) {
             analysisInfo.innerHTML = `❌ 오류: ${error.message}`;
@@ -313,47 +313,65 @@
         const data = audioBuffer.getChannelData(0);
         const sampleRate = audioBuffer.sampleRate;
         
-        // 신호 감지 임계값 설정
-        const threshold = 0.05;
-        const minSignalLength = Math.round(0.05 * sampleRate); // 최소 50ms
+        // RMS (Root Mean Square) 값으로 신호 강도 측정
+        const windowSize = Math.floor(sampleRate * 0.01); // 10ms 윈도우
+        const rmsValues = [];
+        
+        for (let i = 0; i < data.length; i += windowSize) {
+            let sum = 0;
+            for (let j = 0; j < windowSize && i + j < data.length; j++) {
+                sum += data[i + j] * data[i + j];
+            }
+            const rms = Math.sqrt(sum / windowSize);
+            rmsValues.push(rms);
+        }
+        
+        // 동적 임계값 설정 (평균의 30%)
+        const avgRms = rmsValues.reduce((a, b) => a + b, 0) / rmsValues.length;
+        const threshold = avgRms * 0.3;
+        
+        if (threshold === 0 || rmsValues.every(r => r < threshold)) {
+            return ''; // 신호 감지 실패
+        }
         
         let morse = '';
         let inSignal = false;
         let signalStart = 0;
-        let lastSignalEnd = 0;
-
-        for (let i = 0; i < data.length; i++) {
-            const isSignal = Math.abs(data[i]) > threshold;
-
+        
+        for (let i = 0; i < rmsValues.length; i++) {
+            const isSignal = rmsValues[i] > threshold;
+            
             if (isSignal && !inSignal) {
                 // 신호 시작
                 inSignal = true;
                 signalStart = i;
-
-                // 침묵 사이에 문자 구분 추가
-                const silenceDuration = (signalStart - lastSignalEnd) / sampleRate;
-                if (lastSignalEnd > 0 && silenceDuration > 0.2) {
-                    morse += '  '; // 문자 간 공백
-                } else if (lastSignalEnd > 0 && silenceDuration > 0.1) {
-                    morse += ' '; // 부호 간 공백
-                }
             } else if (!isSignal && inSignal) {
-                // 신호 종료
-                inSignal = false;
-                const signalDuration = (i - signalStart) / sampleRate;
-
-                if (signalDuration >= 0.05) {
-                    // 길이에 따라 . 또는 -로 판정
-                    if (signalDuration < 0.2) {
-                        morse += '.';
-                    } else {
-                        morse += '-';
-                    }
+                // 신호 종료 - 길이에 따라 . 또는 -로 판정
+                const signalDuration = (i - signalStart) * windowSize / sampleRate;
+                
+                if (signalDuration < 0.15) { // 150ms 기준
+                    morse += '.';
+                } else {
+                    morse += '-';
                 }
-                lastSignalEnd = i;
+                
+                inSignal = false;
+            } else if (!isSignal && !inSignal && morse.length > 0 && morse[morse.length - 1] !== ' ') {
+                // 부호 사이의 무음 감지
+                morse += ' ';
             }
         }
-
+        
+        // 마지막 신호 처리
+        if (inSignal) {
+            const signalDuration = (rmsValues.length - signalStart) * windowSize / sampleRate;
+            if (signalDuration < 0.15) {
+                morse += '.';
+            } else {
+                morse += '-';
+            }
+        }
+        
         return morse.trim();
     }
 </script>
