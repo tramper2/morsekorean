@@ -4,31 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>한글 모르스 부호 변환기</title>
-    <style>
-        body { font-family: 'Apple SD Gothic Neo', sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f4f4f9; }
-        h2 { text-align: center; color: #333; }
-        textarea { width: 100%; height: 120px; padding: 10px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; font-size: 1.1rem; resize: none; box-sizing: border-box; }
-        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
-        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-play { background-color: #4CAF50; color: white; }
-        .btn-play:hover { background-color: #45a049; }
-        .btn-download { background-color: #2196F3; color: white; }
-        .btn-download:hover { background-color: #0b7dda; }
-        .hint { font-size: 0.9rem; color: #666; text-align: center; }
-        .upload-section { margin-top: 30px; padding: 20px; background: #fff; border-radius: 8px; border: 2px solid #ddd; }
-        .upload-section h3 { margin-top: 0; color: #333; }
-        input[type="file"] { display: none; }
-        .file-input-label { padding: 10px 20px; background-color: #FF9800; color: white; border-radius: 5px; cursor: pointer; font-weight: bold; display: inline-block; transition: 0.3s; }
-        .file-input-label:hover { background-color: #e68900; }
-        .analysis-info { margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 5px; font-size: 0.9rem; }
-        .progress-bar { width: 100%; height: 6px; background: #ddd; border-radius: 3px; margin: 10px 0; display: none; }
-        .progress-fill { height: 100%; background: #4CAF50; border-radius: 3px; width: 0%; }
-    </style>
+    <link rel="stylesheet" href="styles/main.css">
+    <script src="https://unpkg.com/hangul-js"></script>
 </head>
 <body>
 
     <h2>📟 한글 모르스 변환기</h2>
-    
+
     <p>텍스트 (한글/영문/숫자):</p>
     <textarea id="textInput" placeholder="안녕? 혹은 Hello 입력..."></textarea>
 
@@ -46,236 +28,17 @@
     <div class="upload-section">
         <h3>🎵 모르스 오디오 업로드</h3>
         <p style="font-size: 0.95rem; color: #555;">모르스 신호가 포함된 오디오 파일(MP3, WAV, OGG 등)을 업로드하면 모르스 부호로 변환됩니다.</p>
-        
+
         <label for="audioFile" class="file-input-label">📁 오디오 파일 선택</label>
         <input type="file" id="audioFile" accept="audio/*">
-        
+
         <div class="progress-bar">
             <div class="progress-fill"></div>
         </div>
-        
+
         <div class="analysis-info" id="analysisInfo"></div>
     </div>
 
-    <!-- 한글 분리 라이브러리 (Hangul.js) -->
-   <script src="https://unpkg.com/hangul-js"></script>
-<script>
-    // 쌍자음을 기본 자음으로 분해하는 매핑 테이블
-    const DOUBLE_CONSONANTS = {
-        'ㄲ': 'ㄱㄱ', 'ㄸ': 'ㄷㄷ', 'ㅃ': 'ㅂㅂ', 'ㅆ': 'ㅅㅅ', 'ㅉ': 'ㅈㅈ'
-    };
-
-    const MORSE_MAP = {
-        'ㄱ': '.-..', 'ㄴ': '..-.', 'ㄷ': '-...', 'ㄹ': '...-', 'ㅁ': '--', 'ㅂ': '.--', 'ㅅ': '--.', 'ㅇ': '.-.-', 'ㅈ': '.--.', 'ㅊ': '-.-.', 'ㅋ': '-..-', 'ㅌ': '--..', 'ㅍ': '---.', 'ㅎ': '....',
-        'ㅏ': '.', 'ㅑ': '..', 'ㅓ': '-', 'ㅕ': '...', 'ㅗ': '.-', 'ㅛ': '-.', 'ㅜ': '....', 'ㅠ': '.-.', 'ㅡ': '-..', 'ㅣ': '..-', 'ㅐ': '--.-', 'ㅔ': '-.--',
-        '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----',
-        '?': '..--..', '.': '.-.-.-', ',': '--..--', '/': '-..-.', ' ': '/'
-    };
-
-    const REVERSE_MAP = Object.fromEntries(Object.entries(MORSE_MAP).map(([k, v]) => [v, k]));
-
-    const textInput = document.getElementById('textInput');
-    const morseOutput = document.getElementById('morseOutput');
-    const audioFileInput = document.getElementById('audioFile');
-    const analysisInfo = document.getElementById('analysisInfo');
-
-    function packDoubleConsonants(chars) {
-        const map = { 'ㄱㄱ': 'ㄲ', 'ㄷㄷ': 'ㄸ', 'ㅂㅂ': 'ㅃ', 'ㅅㅅ': 'ㅆ', 'ㅈㅈ': 'ㅉ' };
-        let result = chars;
-        for (let key in map) {
-            result = result.split(key).join(map[key]);
-        }
-        return result;
-    }
-
-    function updateTextFromMorse() {
-        const inputVal = morseOutput.value.trim();
-        const words = inputVal.split(/\s\/\s/);
-        const decodedMessage = words.map(word => {
-            const letters = word.split(/\s{2,}/);
-            return letters.map(letter => {
-                const codes = letter.split(/\s+/);
-                let combinedChars = codes.map(code => REVERSE_MAP[code] || '').join('');
-                combinedChars = packDoubleConsonants(combinedChars);
-                return Hangul.assemble(combinedChars);
-            }).join('');
-        }).join(' ');
-        textInput.value = decodedMessage;
-    }
-    morseOutput.addEventListener('input', updateTextFromMorse);
-
-    textInput.addEventListener('input', () => {
-        let val = textInput.value;
-        let result = [];
-        for (const char of val) {
-            if (char === ' ') {
-                result.push('/');
-                continue;
-            }
-            let disassembled = Hangul.disassemble(char);
-            let fixedList = [];
-            disassembled.forEach(c => {
-                if (DOUBLE_CONSONANTS[c]) {
-                    fixedList.push(...DOUBLE_CONSONANTS[c].split(''));
-                } else {
-                    fixedList.push(c);
-                }
-            });
-            result.push(fixedList.map(c => MORSE_MAP[c] || c).join(' '));
-        }
-        morseOutput.value = result.join('  ');
-    });
-
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function generateMorseAudio() {
-        const morse = morseOutput.value;
-        const sampleRate = audioCtx.sampleRate;
-        const frequency = 700;
-        const dot = 0.1;
-        let totalLength = 0;
-        morse.split('').forEach(symbol => {
-            if (symbol === '.' || symbol === '-') {
-                const duration = (symbol === '.') ? dot : dot * 3;
-                totalLength += duration + dot;
-            } else if (symbol === ' ') {
-                totalLength += dot * 2;
-            }
-        });
-        const audioBuffer = audioCtx.createBuffer(1, totalLength * sampleRate, sampleRate);
-        const data = audioBuffer.getChannelData(0);
-        let sampleIndex = 0;
-        morse.split('').forEach(symbol => {
-            if (symbol === '.' || symbol === '-') {
-                const duration = (symbol === '.') ? dot : dot * 3;
-                const durationSamples = duration * sampleRate;
-                const silenceSamples = dot * sampleRate;
-                for (let i = 0; i < durationSamples; i++) {
-                    data[sampleIndex++] = Math.sin(2 * Math.PI * frequency * i / sampleRate) * 0.3;
-                }
-                for (let i = 0; i < silenceSamples; i++) {
-                    data[sampleIndex++] = 0;
-                }
-            } else if (symbol === ' ') {
-                const silenceSamples = dot * 2 * sampleRate;
-                for (let i = 0; i < silenceSamples; i++) {
-                    data[sampleIndex++] = 0;
-                }
-            }
-        });
-        return audioBuffer;
-    }
-    function audioBufferToWav(audioBuffer) {
-        const numberOfChannels = audioBuffer.numberOfChannels;
-        const sampleRate = audioBuffer.sampleRate;
-        const format = 1; // PCM
-        const bitDepth = 16;
-        const data = audioBuffer.getChannelData(0);
-        const length = data.length;
-        const wav = new ArrayBuffer(44 + length * 2);
-        const view = new DataView(wav);
-        function writeString(offset, string) {
-            for (let i = 0; i < string.length; i++) {
-                view.setUint8(offset + i, string.charCodeAt(i));
-            }
-        }
-        writeString(0, 'RIFF');
-        view.setUint32(4, 36 + length * 2, true);
-        writeString(8, 'WAVE');
-        writeString(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, format, true);
-        view.setUint16(22, numberOfChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * numberOfChannels * bitDepth / 8, true);
-        view.setUint16(32, numberOfChannels * bitDepth / 8, true);
-        view.setUint16(34, bitDepth, true);
-        writeString(36, 'data');
-        view.setUint32(40, length * 2, true);
-        let offset = 44;
-        for (let i = 0; i < length; i++) {
-            view.setInt16(offset, data[i] < 0 ? data[i] * 0x8000 : data[i] * 0x7FFF, true);
-            offset += 2;
-        }
-        return wav;
-    }
-    function playMorse() {
-        const audioBuffer = generateMorseAudio();
-        const source = audioCtx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioCtx.destination);
-        source.start(0);
-    }
-    function downloadMorse() {
-        if (!morseOutput.value.trim()) {
-            alert('모르스 부호를 입력하세요.');
-            return;
-        }
-        const audioBuffer = generateMorseAudio();
-        const wav = audioBufferToWav(audioBuffer);
-        const blob = new Blob([wav], { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'morse_' + Date.now() + '.wav';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-    audioFileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        analysisInfo.innerHTML = '⏳ 오디오 분석 중...';
-        const progressBar = document.querySelector('.progress-bar');
-        progressBar.style.display = 'block';
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            const recognizedMorse = analyzeAudioToMorse(audioBuffer);
-
-            analysisInfo.innerHTML = `✅ 분석 완료!<br>파일: ${file.name}<br>길이: ${(audioBuffer.duration).toFixed(2)}초<br>인식된 부호: <code>${recognizedMorse}</code>`;
-            morseOutput.value = recognizedMorse;
-            updateTextFromMorse();
-            progressBar.style.display = 'none';
-        } catch (error) {
-            analysisInfo.innerHTML = `❌ 오류: ${error.message}`;
-            progressBar.style.display = 'none';
-        }
-    });
-
-    // ★★★ 분석 알고리즘(생성기와 완전 일치) ★★★
-    function analyzeAudioToMorse(audioBuffer) {
-        const data = audioBuffer.getChannelData(0);
-        const sampleRate = audioBuffer.sampleRate;
-        const windowSize = Math.floor(sampleRate * 0.01); // 10ms 윈도우
-        const threshold = 0.03; // 직접 생성한 WAV에 최적값(필요하면 0.02~0.05로 조절)
-        let states = [];
-        for (let i = 0; i < data.length; i += windowSize) {
-            let sum = 0;
-            for (let j = 0; j < windowSize && i+j < data.length; j++) {
-                sum += Math.abs(data[i + j]);
-            }
-            let rms = sum / windowSize;
-            states.push(rms > threshold ? 1 : 0);
-        }
-        let morse = '';
-        let i = 0, n = states.length;
-        while (i < n) {
-            let val = states[i];
-            let start = i;
-            while (i < n && states[i] === val) i++;
-            let length = i - start;
-            let duration = length * 0.01;
-            if (val === 1) {
-                if (duration < 0.2) morse += '.';
-                else morse += '-';
-            } else {
-                if (duration >= 0.25) morse += '  ';
-                else if (duration >= 0.15) morse += ' ';
-            }
-        }
-        return morse.trim();
-    }
-</script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>
