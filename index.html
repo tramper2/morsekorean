@@ -15,6 +15,14 @@
         .btn-download { background-color: #2196F3; color: white; }
         .btn-download:hover { background-color: #0b7dda; }
         .hint { font-size: 0.9rem; color: #666; text-align: center; }
+        .upload-section { margin-top: 30px; padding: 20px; background: #fff; border-radius: 8px; border: 2px solid #ddd; }
+        .upload-section h3 { margin-top: 0; color: #333; }
+        input[type="file"] { display: none; }
+        .file-input-label { padding: 10px 20px; background-color: #FF9800; color: white; border-radius: 5px; cursor: pointer; font-weight: bold; display: inline-block; transition: 0.3s; }
+        .file-input-label:hover { background-color: #e68900; }
+        .analysis-info { margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 5px; font-size: 0.9rem; }
+        .progress-bar { width: 100%; height: 6px; background: #ddd; border-radius: 3px; margin: 10px 0; display: none; }
+        .progress-fill { height: 100%; background: #4CAF50; border-radius: 3px; width: 0%; }
     </style>
 </head>
 <body>
@@ -33,6 +41,21 @@
     <textarea id="morseOutput" placeholder=".-.-  ...-  ..-. (직접 입력 가능)"></textarea>
 
     <p class="hint">부호와 부호 사이는 1칸 띄우고, 글자 사이는 3칸(또는 /) 띄워주세요.</p>
+
+    <!-- 오디오 업로드 섹션 -->
+    <div class="upload-section">
+        <h3>🎵 모르스 오디오 업로드</h3>
+        <p style="font-size: 0.95rem; color: #555;">모르스 신호가 포함된 오디오 파일(MP3, WAV, OGG 등)을 업로드하면 모르스 부호로 변환됩니다.</p>
+        
+        <label for="audioFile" class="file-input-label">📁 오디오 파일 선택</label>
+        <input type="file" id="audioFile" accept="audio/*">
+        
+        <div class="progress-bar">
+            <div class="progress-fill"></div>
+        </div>
+        
+        <div class="analysis-info" id="analysisInfo"></div>
+    </div>
 
     <!-- 한글 분리 라이브러리 (Hangul.js) -->
    <script src="https://unpkg.com/hangul-js"></script>
@@ -53,6 +76,8 @@
 
     const textInput = document.getElementById('textInput');
     const morseOutput = document.getElementById('morseOutput');
+    const audioFileInput = document.getElementById('audioFile');
+    const analysisInfo = document.getElementById('analysisInfo');
 
     // [추가] 분리된 자음들을 쌍자음으로 복원하는 함수
 function packDoubleConsonants(chars) {
@@ -248,6 +273,82 @@ textInput.addEventListener('input', () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    // ===== 오디오 업로드 및 분석 기능 =====
+    audioFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        analysisInfo.innerHTML = '⏳ 오디오 분석 중...';
+        const progressBar = document.querySelector('.progress-bar');
+        progressBar.style.display = 'block';
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            
+            // 오디오 신호 분석
+            const recognizedMorse = analyzeAudioToMorse(audioBuffer);
+            
+            // 결과 표시
+            morseOutput.value = recognizedMorse;
+            morseOutput.dispatchEvent(new Event('input'));
+            
+            analysisInfo.innerHTML = `✅ 분석 완료!<br>파일: ${file.name}<br>길이: ${(audioBuffer.duration).toFixed(2)}초`;
+            progressBar.style.display = 'none';
+        } catch (error) {
+            analysisInfo.innerHTML = `❌ 오류: ${error.message}`;
+            progressBar.style.display = 'none';
+        }
+    });
+
+    function analyzeAudioToMorse(audioBuffer) {
+        const data = audioBuffer.getChannelData(0);
+        const sampleRate = audioBuffer.sampleRate;
+        
+        // 신호 감지 임계값 설정
+        const threshold = 0.05;
+        const minSignalLength = Math.round(0.05 * sampleRate); // 최소 50ms
+        
+        let morse = '';
+        let inSignal = false;
+        let signalStart = 0;
+        let lastSignalEnd = 0;
+
+        for (let i = 0; i < data.length; i++) {
+            const isSignal = Math.abs(data[i]) > threshold;
+
+            if (isSignal && !inSignal) {
+                // 신호 시작
+                inSignal = true;
+                signalStart = i;
+
+                // 침묵 사이에 문자 구분 추가
+                const silenceDuration = (signalStart - lastSignalEnd) / sampleRate;
+                if (lastSignalEnd > 0 && silenceDuration > 0.2) {
+                    morse += '  '; // 문자 간 공백
+                } else if (lastSignalEnd > 0 && silenceDuration > 0.1) {
+                    morse += ' '; // 부호 간 공백
+                }
+            } else if (!isSignal && inSignal) {
+                // 신호 종료
+                inSignal = false;
+                const signalDuration = (i - signalStart) / sampleRate;
+
+                if (signalDuration >= 0.05) {
+                    // 길이에 따라 . 또는 -로 판정
+                    if (signalDuration < 0.2) {
+                        morse += '.';
+                    } else {
+                        morse += '-';
+                    }
+                }
+                lastSignalEnd = i;
+            }
+        }
+
+        return morse.trim();
     }
 </script>
 </body>
