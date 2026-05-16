@@ -80,69 +80,73 @@
     const analysisInfo = document.getElementById('analysisInfo');
 
     // [추가] 분리된 자음들을 쌍자음으로 복원하는 함수
-function packDoubleConsonants(chars) {
-    const map = { 'ㄱㄱ': 'ㄲ', 'ㄷㄷ': 'ㄸ', 'ㅂㅂ': 'ㅃ', 'ㅅㅅ': 'ㅆ', 'ㅈㅈ': 'ㅉ' };
-    let result = chars;
-    for (let key in map) {
-        result = result.split(key).join(map[key]);
+    function packDoubleConsonants(chars) {
+        const map = { 'ㄱㄱ': 'ㄲ', 'ㄷㄷ': 'ㄸ', 'ㅂㅂ': 'ㅃ', 'ㅅㅅ': 'ㅆ', 'ㅈㅈ': 'ㅉ' };
+        let result = chars;
+        for (let key in map) {
+            result = result.split(key).join(map[key]);
+        }
+        return result;
     }
-    return result;
-}
-   // 모르스 -> 텍스트 변환 로직
-morseOutput.addEventListener('input', () => {
-    const inputVal = morseOutput.value.trim();
-    
-    // 1. 단어 단위 분리 ( / 기준 )
-    const words = inputVal.split(/\s\/\s/); 
-    
-    const decodedMessage = words.map(word => {
-        // 2. 글자 단위 분리 (공백 2칸 이상 기준)
-        const letters = word.split(/\s{2,}/);
+
+    // 모르스 부호를 텍스트로 변환하는 함수
+    function updateTextFromMorse() {
+        const inputVal = morseOutput.value.trim();
         
-        return letters.map(letter => {
-            // 3. 자모음 단위 분리 (공백 1칸 기준)
-            const codes = letter.split(/\s+/);
-            let combinedChars = codes.map(code => REVERSE_MAP[code] || '').join('');
+        // 1. 단어 단위 분리 ( / 기준 )
+        const words = inputVal.split(/\s\/\s/); 
+        
+        const decodedMessage = words.map(word => {
+            // 2. 글자 단위 분리 (공백 2칸 이상 기준)
+            const letters = word.split(/\s{2,}/);
             
-            // 4. [핵심] 분리된 ㅅㅅ, ㄷㄷ 등을 ㅆ, ㄸ으로 병합
-            combinedChars = packDoubleConsonants(combinedChars);
+            return letters.map(letter => {
+                // 3. 자모음 단위 분리 (공백 1칸 기준)
+                const codes = letter.split(/\s+/);
+                let combinedChars = codes.map(code => REVERSE_MAP[code] || '').join('');
+                
+                // 4. [핵심] 분리된 ㅅㅅ, ㄷㄷ 등을 ㅆ, ㄸ으로 병합
+                combinedChars = packDoubleConsonants(combinedChars);
+                
+                // 5. 한글 조립
+                return Hangul.assemble(combinedChars);
+            }).join(''); // 글자들은 공백 없이 붙임
+        }).join(' '); // 단어 사이는 한 칸 띄움
+
+        textInput.value = decodedMessage;
+    }
+
+    // 모르스 -> 텍스트 변환 로직
+    morseOutput.addEventListener('input', updateTextFromMorse);
+
+    // 텍스트 -> 모르스 변환 로직 (글자 간 공백 2칸 유지)
+    textInput.addEventListener('input', () => {
+        let val = textInput.value;
+        let result = [];
+
+        for (const char of val) {
+            if (char === ' ') {
+                result.push('/');
+                continue;
+            }
             
-            // 5. 한글 조립
-            return Hangul.assemble(combinedChars);
-        }).join(''); // 글자들은 공백 없이 붙임
-    }).join(' '); // 단어 사이는 한 칸 띄움
+            let disassembled = Hangul.disassemble(char);
+            let fixedList = [];
+            disassembled.forEach(c => {
+                // ㅆ -> ㅅ, ㅅ 으로 분리하여 표준 모르스 규격 준수
+                if (DOUBLE_CONSONANTS[c]) {
+                    fixedList.push(...DOUBLE_CONSONANTS[c].split(''));
+                } else {
+                    fixedList.push(c);
+                }
+            });
 
-    textInput.value = decodedMessage;
-});
-
-// 텍스트 -> 모르스 변환 로직 (글자 간 공백 2칸 유지)
-textInput.addEventListener('input', () => {
-    let val = textInput.value;
-    let result = [];
-
-    for (const char of val) {
-        if (char === ' ') {
-            result.push('/');
-            continue;
+            // 글자 단위로 묶고, 글자 사이는 공백 2칸으로 구분
+            result.push(fixedList.map(c => MORSE_MAP[c] || c).join(' '));
         }
         
-        let disassembled = Hangul.disassemble(char);
-        let fixedList = [];
-        disassembled.forEach(c => {
-            // ㅆ -> ㅅ, ㅅ 으로 분리하여 표준 모르스 규격 준수
-            if (DOUBLE_CONSONANTS[c]) {
-                fixedList.push(...DOUBLE_CONSONANTS[c].split(''));
-            } else {
-                fixedList.push(c);
-            }
-        });
-
-        // 글자 단위로 묶고, 글자 사이는 공백 2칸으로 구분
-        result.push(fixedList.map(c => MORSE_MAP[c] || c).join(' '));
-    }
-    
-    morseOutput.value = result.join('  '); 
-});
+        morseOutput.value = result.join('  '); 
+    });
 
     // 오디오 컨텍스트
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -293,7 +297,9 @@ textInput.addEventListener('input', () => {
             
             // 결과 표시
             morseOutput.value = recognizedMorse;
-            morseOutput.dispatchEvent(new Event('input'));
+            
+            // 수동으로 모르스 -> 텍스트 변환 트리거
+            updateTextFromMorse();
             
             analysisInfo.innerHTML = `✅ 분석 완료!<br>파일: ${file.name}<br>길이: ${(audioBuffer.duration).toFixed(2)}초`;
             progressBar.style.display = 'none';
