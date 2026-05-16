@@ -4,7 +4,7 @@ export const ANALYSIS_CONFIG = {
     THRESHOLD: 0.03,       // 신호 감지 임계값
     DOT_MAX_SEC: 0.2,      // 점으로 인식할 최대 길이 (초)
     LETTER_GAP_SEC: 0.15,  // 문자 간격 (초)
-    WORD_GAP_SEC: 0.25     // 단어 간격 (초)
+    WORD_GAP_SEC: 0.5      // 단어 간격 (초) - `/`와 `  `으로 생성되는 긴 무음 구분
 };
 
 /**

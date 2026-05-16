@@ -65,17 +65,23 @@ export function textToMorse(text, Hangul) {
  */
 export function morseToText(morse, Hangul) {
     const inputVal = morse.trim();
-    const words = inputVal.split(/\s\/\s/);
+    // `/` 또는 공백 3개 이상으로 단어 분리
+    const words = inputVal.split(/(\s\/\s|\s{3,})/);
 
-    const decodedMessage = words.map(word => {
-        const letters = word.split(/\s{2,}/);
-        return letters.map(letter => {
-            const codes = letter.split(/\s+/);
-            let combinedChars = codes.map(code => REVERSE_MAP[code] || '').join('');
-            combinedChars = packDoubleConsonants(combinedChars);
-            return Hangul.assemble(combinedChars);
-        }).join('');
-    }).join(' ');
+    const decodedMessage = words
+        .filter(w => w && !w.match(/^(\s\/\s|\s{3,})$/)) // 구분자 제외
+        .map(word => {
+            // 공백 2개 이상으로 문자 분리
+            const letters = word.split(/\s{2,}/);
+            return letters.map(letter => {
+                const codes = letter.split(/\s+/).filter(c => c); // 빈 문자열 필터링
+                let combinedChars = codes.map(code => REVERSE_MAP[code] || '').join('');
+                combinedChars = packDoubleConsonants(combinedChars);
+                return Hangul.assemble(combinedChars);
+            }).join('');
+        })
+        .filter(text => text) // 빈 텍스트 필터링
+        .join(' ');
 
     return decodedMessage;
 }
