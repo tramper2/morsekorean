@@ -8,10 +8,12 @@
         body { font-family: 'Apple SD Gothic Neo', sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background: #f4f4f9; }
         h2 { text-align: center; color: #333; }
         textarea { width: 100%; height: 120px; padding: 10px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; font-size: 1.1rem; resize: none; box-sizing: border-box; }
-        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
         button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         .btn-play { background-color: #4CAF50; color: white; }
         .btn-play:hover { background-color: #45a049; }
+        .btn-download { background-color: #2196F3; color: white; }
+        .btn-download:hover { background-color: #0b7dda; }
         .hint { font-size: 0.9rem; color: #666; text-align: center; }
     </style>
 </head>
@@ -24,6 +26,7 @@
 
     <div class="controls">
         <button class="btn-play" onclick="playMorse()">🔊 신호 듣기</button>
+        <button class="btn-download" onclick="downloadMorse()">⬇️ 오디오 다운로드</button>
     </div>
 
     <p>모르스 부호:</p>
@@ -40,7 +43,7 @@
     };
 
     const MORSE_MAP = {
-        'ㄱ': '.-..', 'ㄴ': '..-.', 'ㄷ': '-...', 'ㄹ': '...-', 'ㅁ': '--', 'ㅂ': '.--', 'ㅅ': '--.', 'ㅇ': '.-.-', 'ㅈ': '.--.', 'ㅊ': '-.-.', 'ㅋ': '-..-', 'ㅌ': '--..', 'ㅍ': '---.', 'ㅎ': '----',
+        'ㄱ': '.-..', 'ㄴ': '..-.', 'ㄷ': '-...', 'ㄹ': '...-', 'ㅁ': '--', 'ㅂ': '.--', 'ㅅ': '--.', 'ㅇ': '.-.-', 'ㅈ': '.--.', 'ㅊ': '-.-.', 'ㅋ': '-..-', 'ㅌ': '--..', 'ㅍ': '---.', 'ㅎ': '....',
         'ㅏ': '.', 'ㅑ': '..', 'ㅓ': '-', 'ㅕ': '...', 'ㅗ': '.-', 'ㅛ': '-.', 'ㅜ': '....', 'ㅠ': '.-.', 'ㅡ': '-..', 'ㅣ': '..-', 'ㅐ': '--.-', 'ㅔ': '-.--',
         '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----',
         '?': '..--..', '.': '.-.-.-', ',': '--..--', '/': '-..-.', ' ': '/'
@@ -116,33 +119,136 @@ textInput.addEventListener('input', () => {
     morseOutput.value = result.join('  '); 
 });
 
-    // 오디오 재생 로직 (기존과 동일)
+    // 오디오 컨텍스트
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playMorse() {
+    
+    // 모르스 신호를 오디오 버퍼로 변환하는 함수
+    function generateMorseAudio() {
         const morse = morseOutput.value;
-        let time = audioCtx.currentTime;
+        const sampleRate = audioCtx.sampleRate;
+        const frequency = 700;
         const dot = 0.1;
-
+        
+        // 전체 길이 계산
+        let totalLength = 0;
         morse.split('').forEach(symbol => {
             if (symbol === '.' || symbol === '-') {
                 const duration = (symbol === '.') ? dot : dot * 3;
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = 700;
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start(time);
-                osc.stop(time + duration);
-                gain.gain.setValueAtTime(0.5, time);
-                gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
-                time += duration + dot;
+                totalLength += duration + dot;
             } else if (symbol === ' ') {
-                time += dot * 2;
+                totalLength += dot * 2;
             }
         });
+        
+        // 오디오 버퍼 생성
+        const audioBuffer = audioCtx.createBuffer(1, totalLength * sampleRate, sampleRate);
+        const data = audioBuffer.getChannelData(0);
+        
+        let sampleIndex = 0;
+        morse.split('').forEach(symbol => {
+            if (symbol === '.' || symbol === '-') {
+                const duration = (symbol === '.') ? dot : dot * 3;
+                const durationSamples = duration * sampleRate;
+                const silenceSamples = dot * sampleRate;
+                
+                // 신호 생성
+                for (let i = 0; i < durationSamples; i++) {
+                    data[sampleIndex++] = Math.sin(2 * Math.PI * frequency * i / sampleRate) * 0.3;
+                }
+                
+                // 무음
+                for (let i = 0; i < silenceSamples; i++) {
+                    data[sampleIndex++] = 0;
+                }
+            } else if (symbol === ' ') {
+                const silenceSamples = dot * 2 * sampleRate;
+                for (let i = 0; i < silenceSamples; i++) {
+                    data[sampleIndex++] = 0;
+                }
+            }
+        });
+        
+        return audioBuffer;
+    }
+    
+    // 오디오 버퍼를 WAV 파일로 변환
+    function audioBufferToWav(audioBuffer) {
+        const numberOfChannels = audioBuffer.numberOfChannels;
+        const sampleRate = audioBuffer.sampleRate;
+        const format = 1; // PCM
+        const bitDepth = 16;
+        
+        const data = audioBuffer.getChannelData(0);
+        const length = data.length;
+        
+        // WAV 헤더 생성
+        const wav = new ArrayBuffer(44 + length * 2);
+        const view = new DataView(wav);
+        
+        function writeString(offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+        
+        // RIFF 헤더
+        writeString(0, 'RIFF');
+        view.setUint32(4, 36 + length * 2, true);
+        writeString(8, 'WAVE');
+        
+        // fmt 서브청크
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, format, true);
+        view.setUint16(22, numberOfChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * numberOfChannels * bitDepth / 8, true);
+        view.setUint16(32, numberOfChannels * bitDepth / 8, true);
+        view.setUint16(34, bitDepth, true);
+        
+        // data 서브청크
+        writeString(36, 'data');
+        view.setUint32(40, length * 2, true);
+        
+        // PCM 데이터 작성
+        let offset = 44;
+        for (let i = 0; i < length; i++) {
+            view.setInt16(offset, data[i] < 0 ? data[i] * 0x8000 : data[i] * 0x7FFF, true);
+            offset += 2;
+        }
+        
+        return wav;
+    }
+    
+    // 재생 함수
+    function playMorse() {
+        const audioBuffer = generateMorseAudio();
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+    }
+    
+    // 다운로드 함수
+    function downloadMorse() {
+        if (!morseOutput.value.trim()) {
+            alert('모르스 부호를 입력하세요.');
+            return;
+        }
+        
+        const audioBuffer = generateMorseAudio();
+        const wav = audioBufferToWav(audioBuffer);
+        const blob = new Blob([wav], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'morse_' + Date.now() + '.wav';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 </script>
 </body>
 </html>
-
