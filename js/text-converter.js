@@ -64,24 +64,29 @@ export function textToMorse(text, Hangul) {
  * @returns {string} 변환된 텍스트
  */
 export function morseToText(morse, Hangul) {
-    const inputVal = morse.trim();
-    // `/` 또는 공백 3개 이상으로 단어 분리
-    const words = inputVal.split(/(\s\/\s|\s{3,})/);
+    if (!morse || !morse.trim()) return '';
 
-    const decodedMessage = words
-        .filter(w => w && !w.match(/^(\s\/\s|\s{3,})$/)) // 구분자 제외
-        .map(word => {
-            // 공백 2개 이상으로 문자 분리
-            const letters = word.split(/\s{2,}/);
-            return letters.map(letter => {
-                const codes = letter.split(/\s+/).filter(c => c); // 빈 문자열 필터링
-                let combinedChars = codes.map(code => REVERSE_MAP[code] || '').join('');
-                combinedChars = packDoubleConsonants(combinedChars);
-                return Hangul.assemble(combinedChars);
-            }).join('');
-        })
-        .filter(text => text) // 빈 텍스트 필터링
-        .join(' ');
+    // `/` 주변의 공백을 정규화하고 단어 분리
+    let inputVal = morse.trim().replace(/\s*\/\s*/g, '  '); // `/`를 공백 2개로 변환
+
+    // 공백 3개 이상을 단어 구분자로 사용
+    const words = inputVal.split(/\s{3,}/).filter(w => w.trim());
+
+    const decodedMessage = words.map(word => {
+        // 공백 2개로 문자 분리
+        const letters = word.split(/\s{2}/).filter(l => l.trim());
+        return letters.map(letter => {
+            // 공백 1개로 자소 분리
+            const codes = letter.split(/\s+/).filter(c => c.trim());
+            if (codes.length === 0) return '';
+
+            let combinedChars = codes.map(code => REVERSE_MAP[code] || '').join('');
+            combinedChars = packDoubleConsonants(combinedChars);
+
+            // 빈 문자열이 아닐 때만 assemble 호출
+            return combinedChars ? Hangul.assemble(combinedChars) : '';
+        }).join('');
+    }).filter(text => text).join(' ');
 
     return decodedMessage;
 }

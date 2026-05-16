@@ -23,12 +23,8 @@ export function generateMorseAudio(morse, audioCtx) {
             spaceCount = 0;
         } else if (symbol === ' ') {
             spaceCount++;
-            // 연속된 공백 처리: 2개 이상은 단어 간격
-            if (spaceCount >= 2) {
-                totalLength += dot * 4; // 단어 간격 (문자 간격보다 김)
-            }
         } else if (symbol === '/') {
-            totalLength += dot * 4; // 단어 간격
+            totalLength += dot * 7; // 단어 간격 (7 * dot)
             spaceCount = 0;
         }
     }
@@ -37,7 +33,7 @@ export function generateMorseAudio(morse, audioCtx) {
     const data = audioBuffer.getChannelData(0);
     let sampleIndex = 0;
 
-    let spaceCount = 0;
+    spaceCount = 0;
     for (const symbol of morse) {
         if (symbol === '.' || symbol === '-') {
             const duration = (symbol === '.') ? dot : dot * 3;
@@ -55,15 +51,15 @@ export function generateMorseAudio(morse, audioCtx) {
             spaceCount = 0;
         } else if (symbol === ' ') {
             spaceCount++;
-            // 연속된 공백 처리: 2개 이상은 단어 간격
+            // 연속된 공백 처리: 2개 이상은 단어 간격 (문자 간격은 신호 사이의 자연스러운 간격으로 처리됨)
             if (spaceCount >= 2) {
-                const silenceSamples = dot * 4 * sampleRate;
+                const silenceSamples = dot * 7 * sampleRate; // 단어 간격
                 for (let i = 0; i < silenceSamples; i++) {
                     data[sampleIndex++] = 0;
                 }
             }
         } else if (symbol === '/') {
-            const silenceSamples = dot * 4 * sampleRate;
+            const silenceSamples = dot * 7 * sampleRate;
             for (let i = 0; i < silenceSamples; i++) {
                 data[sampleIndex++] = 0;
             }
